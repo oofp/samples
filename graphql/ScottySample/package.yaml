@@ -39,6 +39,7 @@ dependencies:
 - extra
 - http-types
 - stm
+- async
 
 library:
   source-dirs: src

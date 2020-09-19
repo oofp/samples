@@ -8,12 +8,14 @@
 
 module SimpleApp.ScottyApp where
 
+import Control.Concurrent.Async(async)
+
 import Data.Morpheus.Types
-  ( GQLType,
+  (Event,  GQLType,
     ResolverQ,
     RootResolver (..),
     Undefined (..),
-    Event,
+    Event (..),
   )
 
 import Data.Morpheus.Server
@@ -26,20 +28,48 @@ import Web.Scotty
   )
 
 import SimpleApp.UserApi
-  ( app,
-    AppEvent,
+  ( User (..),
+    Channel (..),  
+    app,
+    AppEvent (..),
+    UserType (..),
+    Content (..),
   )
 
 import SimpleApp.Utils
   ( httpEndpoint,
     startServer,
   )
+import Control.Monad 
+  ( forever
+  , forM_
+  )
+
+import Data.Text (pack)
+
+import Control.Concurrent (threadDelay)
 
 scottyServer :: IO ()
 scottyServer = do
   (wsApp, publish) <- webSocketsApp app
+  _ <- async $ userLoop publish 
   startServer 3000 wsApp (httpApp publish)
   where
     httpApp :: (AppEvent -> IO ()) -> ScottyM ()
     httpApp publish = do
       httpEndpoint "/" [publish] app
+
+userLoop :: (AppEvent -> IO ()) -> IO ()
+userLoop publish = 
+  forM_  [1..] (\counter-> do
+    threadDelay 1000000
+    let userID = pack $ show counter  
+    let someUser = User 
+                    { firstName = userID <> "first"
+                    , lastName = userID <> "last"
+                    , middleName = Nothing
+                    , userType = UserDev
+                    }
+    publish (Event [UserChannel] (NewUser someUser)))
+    
+    
