@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 760a915a7046964132e2dcc7a59c55cab9ca406426a2421f4ab345ef9b99c803
+-- hash: 4d3af592fbed4e41e2b9e283dd04ff19658c8fffdc6161f6f63bb092eb77fd69
 
 name:           graphqlApp
 version:        0.1.0.0
@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      SimpleApp.CallApi
       SimpleApp.ScottyApp
       SimpleApp.UserApi
       SimpleApp.Utils

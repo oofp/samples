@@ -8,6 +8,7 @@
 
 module SimpleApp.UserApi where
 
+import SimpleApp.CallApi
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Data.Morpheus.Kind (INTERFACE)
@@ -51,6 +52,7 @@ data UserArgs = UserArgs
   }
   deriving (Generic, GQLType)
 
+
 resolveUser :: UserArgs -> ResolverQ e IO User
 resolveUser UserArgs {userID, midName} =  
   return
@@ -61,8 +63,25 @@ resolveUser UserArgs {userID, midName} =
       , userType = UserDev
       }
 
+resolveUserM :: UserArgs -> ResolverM e IO User
+resolveUserM UserArgs {userID, midName} =  
+  return
+    User
+      { firstName = userID <> "first"
+      , lastName = userID <> "last"
+      , middleName = midName
+      , userType = UserDev
+      }
+
 data Query m = Query
   { user :: UserArgs -> m User
+  , allCalls :: m [Call]
+  }
+  deriving (Generic, GQLType)
+
+data Mutation m = Mutation
+  { updateUser :: UserArgs -> m User
+  , createUser :: User -> m User
   }
   deriving (Generic, GQLType)
 
@@ -86,11 +105,17 @@ resolveNewUser = subscribe UserChannel $ do
 --getDummyUser :: WithOperation o => User IO -> Content -> IO (Either String (User (Resolver o AppEvent IO)))
 --getDummyUser usr _ = pure usr
 
-rootResolver :: RootResolver IO AppEvent Query Undefined Subscription
+rootResolver :: RootResolver IO AppEvent Query Mutation Subscription
 rootResolver =
   RootResolver
-    { queryResolver = Query {user = resolveUser},
-      mutationResolver = Undefined,
+    { queryResolver = Query 
+                        { user = resolveUser
+                        , allCalls = resolveAllCalls
+                        },
+      mutationResolver = Mutation
+                        { updateUser = resolveUserM
+                        , createUser = return 
+                        },
       subscriptionResolver = Subscription {newUser = resolveNewUser}
     }
 
