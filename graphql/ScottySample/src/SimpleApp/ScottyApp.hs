@@ -9,9 +9,19 @@
 module SimpleApp.ScottyApp where
 
 import Control.Concurrent.Async(async)
+import Control.Concurrent.STM
+  ( atomically,
+  )
+import Control.Concurrent.STM.TChan
+  ( newTChanIO, 
+    writeTChan, 
+    readTChan,
+  )
 
 import Data.Morpheus.Types
-  (Event,  GQLType,
+  ( Event,  
+    App,
+    GQLType,
     ResolverQ,
     RootResolver (..),
     Undefined (..),
@@ -30,10 +40,11 @@ import Web.Scotty
 import SimpleApp.UserApi
   ( User (..),
     Channel (..),  
-    app,
+    mkApp,
     AppEvent (..),
     UserType (..),
     Content (..),
+    ChannelID (..),
   )
 
 import SimpleApp.Utils
@@ -51,12 +62,16 @@ import Control.Concurrent (threadDelay)
 
 scottyServer :: IO ()
 scottyServer = do
-  (wsApp, publish) <- webSocketsApp app
-  _ <- async $ userLoop publish 
-  startServer 3000 wsApp (httpApp publish)
+  evChan <- newTChanIO
+  let evPublish = atomically . writeTChan evChan 
+  let app = mkApp evPublish
+  (wsApp, publish) <- webSocketsApp app 
+  _ <- async $ userLoop evPublish
+  _ <- async $ forever $ (atomically $ readTChan evChan)  >>= publish
+  startServer 3000 wsApp (httpApp app publish)
   where
-    httpApp :: (AppEvent -> IO ()) -> ScottyM ()
-    httpApp publish = do
+    httpApp :: App AppEvent IO -> (AppEvent -> IO ()) -> ScottyM ()
+    httpApp app publish = do
       httpEndpoint "/" [publish] app
 
 userLoop :: (AppEvent -> IO ()) -> IO ()
@@ -70,6 +85,6 @@ userLoop publish =
                     , middleName = Nothing
                     , userType = UserDev
                     }
-    publish (Event [UserChannel] (NewUser someUser)))
+    publish (Event [UserChannel (ChannelID "0")] (NewUser someUser)))
     
     

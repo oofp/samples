@@ -31,6 +31,17 @@ import Data.Morpheus
   ( App,
     deriveApp,
   )
+import Control.Monad 
+  ( forever,
+    forM_,
+  )
+
+import Control.Monad.IO.Class 
+  ( liftIO
+  )  
+
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async(async)
 
 data UserType 
   = UserManager
@@ -73,6 +84,22 @@ resolveUserM UserArgs {userID, midName} =
       , userType = UserDev
       }
 
+resolveStartChannel :: (AppEvent -> IO ()) -> ChannelID -> ResolverM e IO ChannelID
+resolveStartChannel evPublish chID = do 
+  liftIO $ async $ forM_  [1..] (\counter-> do
+    threadDelay 1000000
+    let userID = "user_" <> (channelID chID)  
+    let someUser = User 
+                    { firstName = userID <> "first"
+                    , lastName = userID <> "last"
+                    , middleName = Nothing
+                    , userType = UserManager
+                    }
+    evPublish (Event [UserChannel chID] (NewUser someUser)))
+  return chID  
+
+
+
 data Query m = Query
   { user :: UserArgs -> m User
   , allCalls :: m [Call]
@@ -82,22 +109,26 @@ data Query m = Query
 data Mutation m = Mutation
   { updateUser :: UserArgs -> m User
   , createUser :: User -> m User
+  , startChannel :: ChannelID -> m ChannelID
   }
   deriving (Generic, GQLType)
 
 data Subscription m = Subscription 
-  { newUser :: SubscriptionField (m User)
+  { newUser :: ChannelID -> SubscriptionField (m User)
   } deriving (Generic, GQLType)
 
-data Channel = UserChannel 
+newtype ChannelID = ChannelID {channelID::Text} 
+  deriving (Generic, GQLType, Show, Eq, Ord)
+
+data Channel = UserChannel ChannelID
   deriving (Show, Eq, Ord)
 
 data Content = NewUser User 
 type AppEvent = Event Channel Content
 
 -- Resolve SUBSCRIPTION
-resolveNewUser :: SubscriptionField (ResolverS AppEvent IO User)
-resolveNewUser = subscribe UserChannel $ do
+resolveNewUser :: ChannelID -> SubscriptionField (ResolverS AppEvent IO User)
+resolveNewUser chID = subscribe (UserChannel chID) $ do
   pure subResolver
   where
     subResolver (Event _ (NewUser usr)) = pure usr
@@ -105,8 +136,8 @@ resolveNewUser = subscribe UserChannel $ do
 --getDummyUser :: WithOperation o => User IO -> Content -> IO (Either String (User (Resolver o AppEvent IO)))
 --getDummyUser usr _ = pure usr
 
-rootResolver :: RootResolver IO AppEvent Query Mutation Subscription
-rootResolver =
+rootResolver :: (AppEvent -> IO ()) -> RootResolver IO AppEvent Query Mutation Subscription
+rootResolver evPublish =
   RootResolver
     { queryResolver = Query 
                         { user = resolveUser
@@ -115,9 +146,10 @@ rootResolver =
       mutationResolver = Mutation
                         { updateUser = resolveUserM
                         , createUser = return 
+                        , startChannel = resolveStartChannel evPublish
                         },
       subscriptionResolver = Subscription {newUser = resolveNewUser}
     }
 
-app :: App AppEvent IO
-app = deriveApp rootResolver    
+mkApp :: (AppEvent -> IO ()) -> App AppEvent IO
+mkApp evPublish = deriveApp (rootResolver evPublish)    
