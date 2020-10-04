@@ -1,0 +1,9 @@
+
+query GetUser ($userId:String!, $midName:String){
+  user (userID: $userId, midName:$midName) {
+    firstName
+    lastName
+    userType
+    middleName
+  }
+}

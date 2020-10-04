@@ -1,0 +1,58 @@
+type Call {
+  callID: CallID!
+  localAddress: String!
+  remoteAddress: String!
+  callState: CallState!
+}
+
+enum CallState {
+  Offered
+  Ringing
+  Connecting
+  Connected
+  Initiated
+  Ringback
+  Disconnected
+}
+
+type ChannelID {
+  channelID: String!
+}
+
+type User {
+  firstName: String!
+  lastName: String!
+  middleName: String
+  userType: UserType!
+}
+
+type CallID {
+  id: Int!
+}
+
+enum UserType {
+  UserManager
+  UserTechLead
+  UserDev
+  UserQA
+}
+
+type Query {
+  user(userID: String!, midName: String): User!
+  allCalls: [Call!]!
+}
+
+type Mutation {
+  updateUser(userID: String!, midName: String): User!
+  createUser(
+    firstName: String!
+    lastName: String!
+    middleName: String
+    userType: UserType!
+  ): User!
+  startChannel(channelID: String!): ChannelID!
+}
+
+type Subscription {
+  newUser(channelID: String!): User!
+}

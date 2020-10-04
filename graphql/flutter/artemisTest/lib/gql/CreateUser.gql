@@ -1,0 +1,9 @@
+mutation CreateUser ($firstN: String!, $lastN: String!){
+  createUser (firstName: $firstN, lastName: $lastN,userType: UserQA) 
+  {
+    userType
+    lastName
+    firstName
+    middleName
+  }
+}

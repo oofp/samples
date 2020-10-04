@@ -1,0 +1,7 @@
+subscription NewUserSub {
+  newUser (channelID:"0"){
+    firstName
+    lastName
+    userType
+  }
+}

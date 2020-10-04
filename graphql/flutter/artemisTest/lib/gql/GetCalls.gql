@@ -1,0 +1,13 @@
+#import 'gql/schema.graphql'
+
+query GetCalls {
+  allCalls {
+    callID {
+      id
+    }
+    localAddress
+    remoteAddress
+    callState
+  }
+}
+
