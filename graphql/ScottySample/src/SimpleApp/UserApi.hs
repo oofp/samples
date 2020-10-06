@@ -9,6 +9,7 @@
 module SimpleApp.UserApi where
 
 import SimpleApp.CallApi
+import SimpleApp.WebRTC
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Data.Morpheus.Kind (INTERFACE)
@@ -98,7 +99,25 @@ resolveStartChannel evPublish chID = do
     evPublish (Event [UserChannel chID] (NewUser someUser)))
   return chID  
 
-
+resolvewebRTCReq :: (AppEvent -> IO ()) -> WebRTCReq -> ResolverM e IO WebRTCCallID
+resolvewebRTCReq evPublish (WebRTCReq chID (MakeCall makeCallParams)) = do
+  let webCallID = WebRTCCCallID 1
+  let params = NewIncominCallParams makeCallParams webCallID
+  let ev = WebRTCEv (NewIncomingCall params)
+  liftIO $ evPublish (Event [UserChannel chID] ev)
+  return webCallID
+resolvewebRTCReq evPublish (WebRTCReq chID  (AnswerCall answerCallParams)) = do
+  let ev = WebRTCEv (CallAnswered answerCallParams)
+  liftIO $ evPublish (Event [UserChannel chID] ev)
+  return (answerCallID answerCallParams)
+resolvewebRTCReq evPublish (WebRTCReq chID (IceCandidateReq iceCandidateParams)) = do
+  let ev = WebRTCEv (IceCandidateRcvd iceCandidateParams)
+  liftIO $ evPublish (Event [UserChannel chID] ev)
+  return (iceCallID iceCandidateParams)
+resolvewebRTCReq evPublish (WebRTCReq chID  (DropCall dropCallParams)) = do
+  let ev = WebRTCEv (CallDropped dropCallParams)
+  liftIO $ evPublish (Event [UserChannel chID] ev)
+  return (dropCallID dropCallParams)
 
 data Query m = Query
   { user :: UserArgs -> m User
@@ -106,15 +125,22 @@ data Query m = Query
   }
   deriving (Generic, GQLType)
 
+data WebRTCReq = WebRTCReq 
+  { reqChannelID:: ChannelID
+  , clnReq :: ClientReq
+  } deriving (Generic, GQLType)
+
 data Mutation m = Mutation
   { updateUser :: UserArgs -> m User
   , createUser :: User -> m User
   , startChannel :: ChannelID -> m ChannelID
+  , webRTCReq :: WebRTCReq -> m WebRTCCallID
   }
   deriving (Generic, GQLType)
 
 data Subscription m = Subscription 
   { newUser :: ChannelID -> SubscriptionField (m User)
+  , webRTCMsg :: ChannelID -> SubscriptionField (m ServerMsg)
   } deriving (Generic, GQLType)
 
 newtype ChannelID = ChannelID {channelID::Text} 
@@ -123,7 +149,10 @@ newtype ChannelID = ChannelID {channelID::Text}
 data Channel = UserChannel ChannelID
   deriving (Show, Eq, Ord)
 
-data Content = NewUser User 
+data Content 
+  = NewUser User
+  | WebRTCEv ServerMsg
+
 type AppEvent = Event Channel Content
 
 -- Resolve SUBSCRIPTION
@@ -132,6 +161,12 @@ resolveNewUser chID = subscribe (UserChannel chID) $ do
   pure subResolver
   where
     subResolver (Event _ (NewUser usr)) = pure usr
+
+resolveServerMsg :: ChannelID -> SubscriptionField (ResolverS AppEvent IO ServerMsg)
+resolveServerMsg chID = subscribe (UserChannel chID) $ do
+  pure subResolver
+  where
+    subResolver (Event _ (WebRTCEv srvMsg)) = pure srvMsg
 
 --getDummyUser :: WithOperation o => User IO -> Content -> IO (Either String (User (Resolver o AppEvent IO)))
 --getDummyUser usr _ = pure usr
@@ -147,8 +182,12 @@ rootResolver evPublish =
                         { updateUser = resolveUserM
                         , createUser = return 
                         , startChannel = resolveStartChannel evPublish
+                        , webRTCReq = resolvewebRTCReq evPublish
                         },
-      subscriptionResolver = Subscription {newUser = resolveNewUser}
+      subscriptionResolver = Subscription 
+        { newUser = resolveNewUser
+        , webRTCMsg = resolveServerMsg
+        }
     }
 
 mkApp :: (AppEvent -> IO ()) -> App AppEvent IO
